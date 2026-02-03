@@ -1,4 +1,19 @@
-#pragma once
+/**
+ *
+ *  @file ValidationErrors.hpp
+ *  @author Gaspard Kirira
+ *
+ *  Copyright 2025, Gaspard Kirira.
+ *  All rights reserved.
+ *  https://github.com/vixcpp/vix
+ *
+ *  Use of this source code is governed by a MIT license
+ *  that can be found in the License file.
+ *
+ *  Vix.cpp
+ */
+#ifndef VIX_VALIDATION_VALIDATION_ERRORS_HPP
+#define VIX_VALIDATION_VALIDATION_ERRORS_HPP
 
 #include <vector>
 #include <string>
@@ -108,3 +123,5 @@ namespace vix::validation
   };
 
 } // namespace vix::validation
+
+#endif
