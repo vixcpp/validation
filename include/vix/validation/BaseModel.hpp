@@ -25,48 +25,44 @@ namespace vix::validation
 
   /**
    * @class BaseModel
-   * @brief CRTP base class for schema-driven model validation.
+   * @brief CRTP base class for schema-driven validation.
    *
-   * BaseModel provides a lightweight, Pydantic-inspired validation interface
-   * for user-defined data models. Validation rules are declared once via a
-   * static `schema()` function on the derived type and reused across all
-   * validation calls.
+   * BaseModel binds a validation schema to a user type at compile time.
+   * The derived type declares validation rules via a single static `schema()`
+   * function. The schema is cached internally and reused across all validation
+   * calls (constructed once, thread-safe since C++11).
    *
-   * Design goals:
-   * - Zero runtime configuration
-   * - Strong typing and compile-time guarantees
-   * - Deterministic validation behavior
-   * - No repeated schema construction
-   *
-   * Key properties:
-   * - Uses CRTP to bind the schema to the derived type
-   * - Exposes both instance-level and static validation APIs
-   * - Internally caches the schema (constructed once, thread-safe)
-   *
-   * Requirements for `Derived`:
+   * Requirements for Derived:
    * - Must inherit from `BaseModel<Derived>`
    * - Must implement:
    *   `static vix::validation::Schema<Derived> schema();`
    *
+   * Key properties:
+   * - Instance validation: `obj.validate()`
+   * - Static validation: `BaseModel::validate(obj)`
+   * - Cached schema access: `BaseModel::schema()`
+   *
    * Example:
    * @code
-   * struct RegisterForm : BaseModel<RegisterForm>
+   * struct RegisterForm : vix::validation::BaseModel<RegisterForm>
    * {
    *   std::string email;
    *   std::string password;
    *
-   *   static Schema<RegisterForm> schema()
+   *   static vix::validation::Schema<RegisterForm> schema()
    *   {
-   *     return schema<RegisterForm>()
-   *       .field("email", &RegisterForm::email, ...)
-   *       .field("password", &RegisterForm::password, ...);
+   *     return vix::validation::schema<RegisterForm>()
+   *       .field("email", &RegisterForm::email,
+   *              vix::validation::field<std::string>().required().email().length_max(120))
+   *       .field("password", &RegisterForm::password,
+   *              vix::validation::field<std::string>().required().length_min(8).length_max(64));
    *   }
    * };
    *
-   * RegisterForm form{"user@example.com", "secret"};
-   * auto result = form.validate();
-   * if (!result.ok()) {
-   *   // handle errors
+   * RegisterForm f;
+   * auto r = f.validate();
+   * if (!r.ok()) {
+   *   // handle r.errors
    * }
    * @endcode
    */
@@ -75,9 +71,9 @@ namespace vix::validation
   {
   public:
     /**
-     * @brief Validate the current object instance.
+     * @brief Validate this instance using the cached schema.
      *
-     * @return ValidationResult containing all accumulated validation errors.
+     * @return ValidationResult containing accumulated errors.
      */
     [[nodiscard]] ValidationResult validate() const
     {
@@ -85,11 +81,9 @@ namespace vix::validation
     }
 
     /**
-     * @brief Check whether the current object instance is valid.
+     * @brief Convenience validity check for this instance.
      *
-     * Convenience wrapper around `validate()`.
-     *
-     * @return true if no validation errors are produced, false otherwise.
+     * @return true if validation produced no errors, false otherwise.
      */
     [[nodiscard]] bool is_valid() const
     {
@@ -97,12 +91,10 @@ namespace vix::validation
     }
 
     /**
-     * @brief Validate an arbitrary instance of the derived type.
-     *
-     * This allows validation without constructing a temporary model instance.
+     * @brief Validate an arbitrary instance of Derived.
      *
      * @param obj Object to validate.
-     * @return ValidationResult containing all accumulated validation errors.
+     * @return ValidationResult containing accumulated errors.
      */
     [[nodiscard]] static ValidationResult validate(const Derived &obj)
     {
@@ -110,9 +102,7 @@ namespace vix::validation
     }
 
     /**
-     * @brief Access the cached schema associated with the derived type.
-     *
-     * The schema is constructed once and reused across all validation calls.
+     * @brief Access the cached schema for Derived.
      *
      * @return Reference to the cached Schema<Derived>.
      */
@@ -123,10 +113,10 @@ namespace vix::validation
 
   private:
     /**
-     * @brief Internal accessor for the cached schema.
+     * @brief Internal schema cache accessor.
      *
-     * Enforces at compile time that the derived type implements a compatible
-     * `schema()` function and guarantees single construction.
+     * Enforces at compile time that Derived::schema() returns Schema<Derived>.
+     * The returned schema is constructed once and reused.
      */
     [[nodiscard]] static const Schema<Derived> &schema_ref()
     {
