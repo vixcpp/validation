@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <string_view>
 
 #include <vix/validation/BaseModel.hpp>
 #include <vix/validation/Schema.hpp>
@@ -11,6 +12,11 @@ struct RegisterForm : vix::validation::BaseModel<RegisterForm>
   std::string email;
   std::string password;
   std::string age;
+
+  RegisterForm(std::string e, std::string p, std::string a)
+      : email(std::move(e)), password(std::move(p)), age(std::move(a))
+  {
+  }
 
   static vix::validation::Schema<RegisterForm> schema()
   {
