@@ -12,9 +12,9 @@
  *
  *  Vix.cpp
  */
-#pragma once
+#ifndef VIX_VALIDATION_SCHEMA_HPP
+#define VIX_VALIDATION_SCHEMA_HPP
 
-#include <concepts>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -23,7 +23,9 @@
 #include <vector>
 
 #include <vix/validation/Pipe.hpp>
+#include <vix/validation/Rule.hpp>
 #include <vix/validation/Validate.hpp>
+#include <vix/validation/ValidationErrors.hpp>
 #include <vix/validation/ValidationResult.hpp>
 
 namespace vix::validation
@@ -45,7 +47,8 @@ namespace vix::validation
     {
     };
     template <typename Ret>
-    inline constexpr bool is_validation_result_v = is_validation_result<remove_cvref_t<Ret>>::value;
+    inline constexpr bool is_validation_result_v =
+        is_validation_result<remove_cvref_t<Ret>>::value;
 
     template <typename Ret, typename FieldT>
     inline constexpr bool is_validator_builder_v =
@@ -54,21 +57,21 @@ namespace vix::validation
     template <typename Ret, typename ParsedT>
     inline constexpr bool is_parsed_builder_v =
         std::is_same_v<remove_cvref_t<Ret>, ParsedValidator<ParsedT>>;
+
   } // namespace detail
 
   /**
    * @brief Schema<T> validates an object of type T by applying field validators.
    *
-   * Pydantic-like goal:
-   * - Provide a schema builder that is easy to read.
-   * - Keep call-sites clean: field(..., lambda) and parsed(..., lambda)
+   * Goal:
+   * - Keep call sites clean: field(..., lambda) and parsed(..., lambda)
    * - Allow lambdas to return either:
    *   - ValidationResult (explicit)
    *   - Validator<FieldT> (builder) and Schema calls .result()
    *   - ParsedValidator<ParsedT> (builder) and Schema calls .result()
    *
    * Note:
-   * - Do NOT expose std::function in the public API of field/parsed,
+   * - Avoid exposing std::function in the public API of field/parsed,
    *   otherwise lambda conversions can fail in templates.
    */
   template <typename T>
@@ -79,10 +82,13 @@ namespace vix::validation
 
     Schema() = default;
 
-    // ------------------------------------------------------------
-    // field: typed field validation
-    // lambda signature: (std::string_view field, const FieldT& value) -> ValidationResult OR Validator<FieldT>
-    // ------------------------------------------------------------
+    /**
+     * @brief Register a typed field validation.
+     *
+     * Callable signature:
+     *   (std::string_view field, const FieldT& value)
+     *     -> ValidationResult OR Validator<FieldT>
+     */
     template <typename FieldT, typename F>
     Schema &field(std::string field_name, FieldT T::*member, F &&fn)
     {
@@ -117,10 +123,15 @@ namespace vix::validation
       return *this;
     }
 
-    // ------------------------------------------------------------
-    // parsed: validate a field stored as string or string_view via parse<T>
-    // lambda signature: (std::string_view field, std::string_view input) -> ValidationResult OR ParsedValidator<ParsedT>
-    // ------------------------------------------------------------
+    /**
+     * @brief Register a parsed field validation.
+     *
+     * FieldT must be std::string or std::string_view.
+     *
+     * Callable signature:
+     *   (std::string_view field, std::string_view input)
+     *     -> ValidationResult OR ParsedValidator<ParsedT>
+     */
     template <typename ParsedT, typename FieldT, typename F>
     Schema &parsed(std::string field_name, FieldT T::*member, F &&fn)
       requires(std::is_same_v<FieldT, std::string> || std::is_same_v<FieldT, std::string_view>)
@@ -134,9 +145,13 @@ namespace vix::validation
           {
             std::string_view input;
             if constexpr (std::is_same_v<FieldT, std::string>)
+            {
               input = std::string_view(obj.*member);
+            }
             else
+            {
               input = (obj.*member);
+            }
 
             using Ret = std::invoke_result_t<Fn &, std::string_view, std::string_view>;
 
@@ -160,17 +175,21 @@ namespace vix::validation
       return *this;
     }
 
-    // ------------------------------------------------------------
-    // validate: execute all checks
-    // ------------------------------------------------------------
+    /**
+     * @brief Execute all checks and return accumulated errors.
+     */
     [[nodiscard]] ValidationResult validate(const T &obj) const
     {
       ValidationErrors out;
+
       for (const auto &check : checks_)
       {
         if (check)
+        {
           check(obj, out);
+        }
       }
+
       return ValidationResult{std::move(out)};
     }
 
@@ -188,3 +207,5 @@ namespace vix::validation
   }
 
 } // namespace vix::validation
+
+#endif

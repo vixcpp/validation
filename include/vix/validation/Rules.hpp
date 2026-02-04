@@ -21,6 +21,8 @@
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <vix/validation/Rule.hpp>
@@ -37,10 +39,12 @@ namespace vix::validation::rules
     {
       std::unordered_map<std::string, std::string> m;
       m.reserve(items.size());
+
       for (const auto &p : items)
       {
         m.emplace(p.first, p.second);
       }
+
       return m;
     }
 
@@ -55,6 +59,10 @@ namespace vix::validation::rules
       {
         return std::string(v);
       }
+      else if constexpr (std::is_same_v<T, bool>)
+      {
+        return v ? "true" : "false";
+      }
       else if constexpr (std::is_arithmetic_v<T>)
       {
         return std::to_string(v);
@@ -65,15 +73,13 @@ namespace vix::validation::rules
       }
     }
 
+    [[nodiscard]] inline bool has_space(std::string_view s) noexcept
+    {
+      return std::find(s.begin(), s.end(), ' ') != s.end();
+    }
+
   } // namespace detail
 
-  // ------------------------------------------------------------
-  // required
-  // ------------------------------------------------------------
-
-  /**
-   * @brief Required rule for std::string / std::string_view.
-   */
   [[nodiscard]] inline Rule<std::string>
   required(std::string message = "field is required")
   {
@@ -98,9 +104,6 @@ namespace vix::validation::rules
     };
   }
 
-  /**
-   * @brief Required rule for std::optional<T>.
-   */
   template <typename T>
   [[nodiscard]] inline Rule<std::optional<T>>
   required(std::string message = "field is required")
@@ -113,10 +116,6 @@ namespace vix::validation::rules
       }
     };
   }
-
-  // ------------------------------------------------------------
-  // min / max / between (numbers)
-  // ------------------------------------------------------------
 
   template <typename T>
   [[nodiscard]] inline Rule<T>
@@ -179,10 +178,6 @@ namespace vix::validation::rules
     };
   }
 
-  // ------------------------------------------------------------
-  // length rules (string)
-  // ------------------------------------------------------------
-
   [[nodiscard]] inline Rule<std::string>
   length_min(std::size_t n, std::string message = "length is below minimum")
   {
@@ -217,30 +212,29 @@ namespace vix::validation::rules
     };
   }
 
-  // ------------------------------------------------------------
-  // in_set (string)
-  // ------------------------------------------------------------
-
   [[nodiscard]] inline Rule<std::string>
   in_set(std::vector<std::string> allowed, std::string message = "value is not allowed")
   {
-    return [allowed = std::move(allowed), msg = std::move(message)](std::string_view field, const std::string &value, ValidationErrors &out)
+    std::unordered_set<std::string> set;
+    set.reserve(allowed.size());
+    for (auto &s : allowed)
     {
-      const auto it = std::find(allowed.begin(), allowed.end(), value);
-      if (it == allowed.end())
+      set.insert(std::move(s));
+    }
+
+    return [set = std::move(set), msg = std::move(message)](std::string_view field, const std::string &value, ValidationErrors &out)
+    {
+      if (set.find(value) == set.end())
       {
         out.add(
             std::string(field),
             ValidationErrorCode::InSet,
             msg,
-            detail::meta_kv({{"got", value}}));
+            detail::meta_kv({{"got", value},
+                             {"allowed_count", std::to_string(set.size())}}));
       }
     };
   }
-
-  // ------------------------------------------------------------
-  // format helpers (simple email)
-  // ------------------------------------------------------------
 
   /**
    * @brief Very lightweight email format check.
@@ -249,23 +243,47 @@ namespace vix::validation::rules
    * - contains exactly one '@'
    * - at least one char before '@'
    * - at least one '.' after '@'
+   * - no spaces
    */
   [[nodiscard]] inline Rule<std::string>
   email(std::string message = "invalid email format")
   {
     return [msg = std::move(message)](std::string_view field, const std::string &value, ValidationErrors &out)
     {
+      if (value.empty())
+      {
+        out.add(std::string(field), ValidationErrorCode::Format, msg,
+                detail::meta_kv({{"reason", "empty"}}));
+        return;
+      }
+
+      if (detail::has_space(value))
+      {
+        out.add(std::string(field), ValidationErrorCode::Format, msg,
+                detail::meta_kv({{"reason", "space"}}));
+        return;
+      }
+
       const auto at = value.find('@');
       if (at == std::string::npos || at == 0)
       {
-        out.add(std::string(field), ValidationErrorCode::Format, msg);
+        out.add(std::string(field), ValidationErrorCode::Format, msg,
+                detail::meta_kv({{"reason", "missing_at"}}));
+        return;
+      }
+
+      if (value.find('@', at + 1) != std::string::npos)
+      {
+        out.add(std::string(field), ValidationErrorCode::Format, msg,
+                detail::meta_kv({{"reason", "multiple_at"}}));
         return;
       }
 
       const auto dot = value.find('.', at + 1);
       if (dot == std::string::npos || dot == at + 1 || dot == value.size() - 1)
       {
-        out.add(std::string(field), ValidationErrorCode::Format, msg);
+        out.add(std::string(field), ValidationErrorCode::Format, msg,
+                detail::meta_kv({{"reason", "missing_dot"}}));
         return;
       }
     };

@@ -15,15 +15,16 @@
 #ifndef VIX_VALIDATION_VALIDATE_HPP
 #define VIX_VALIDATION_VALIDATE_HPP
 
+#include <optional>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
-#include <optional>
 
 #include <vix/validation/Rule.hpp>
 #include <vix/validation/Rules.hpp>
+#include <vix/validation/ValidationErrors.hpp>
 #include <vix/validation/ValidationResult.hpp>
 
 namespace vix::validation
@@ -47,41 +48,40 @@ namespace vix::validation
     {
     }
 
-    // Add a custom rule
     Validator &rule(Rule<T> r)
     {
       rules_.push_back(std::move(r));
       return *this;
     }
 
-    // --------------------------------------------
-    // Common helpers (enabled depending on T)
-    // --------------------------------------------
+    Validator &rule_if(bool enabled, Rule<T> r)
+    {
+      if (enabled)
+      {
+        rules_.push_back(std::move(r));
+      }
+      return *this;
+    }
 
-    // required for std::string
     Validator &required(std::string message = "field is required")
       requires std::is_same_v<T, std::string>
     {
       return rule(rules::required(std::move(message)));
     }
 
-    // required for std::string_view
     Validator &required_sv(std::string message = "field is required")
       requires std::is_same_v<T, std::string_view>
     {
       return rule(rules::required_sv(std::move(message)));
     }
 
-    // required for std::optional<U>
     template <typename U>
     Validator &required(std::string message = "field is required")
       requires std::is_same_v<T, std::optional<U>>
     {
-      // FIX: rules::required(...) returns Rule<std::optional<U>>
       return rule(rules::required(std::move(message)));
     }
 
-    // numeric min/max/between
     Validator &min(T min_value, std::string message = "value is below minimum")
       requires std::is_arithmetic_v<T>
     {
@@ -100,7 +100,6 @@ namespace vix::validation
       return rule(rules::between<T>(min_value, max_value, std::move(message)));
     }
 
-    // string length
     Validator &length_min(std::size_t n, std::string message = "length is below minimum")
       requires std::is_same_v<T, std::string>
     {
@@ -113,27 +112,26 @@ namespace vix::validation
       return rule(rules::length_max(n, std::move(message)));
     }
 
-    // string email
     Validator &email(std::string message = "invalid email format")
       requires std::is_same_v<T, std::string>
     {
       return rule(rules::email(std::move(message)));
     }
 
-    // string in_set
     Validator &in_set(std::vector<std::string> allowed, std::string message = "value is not allowed")
       requires std::is_same_v<T, std::string>
     {
       return rule(rules::in_set(std::move(allowed), std::move(message)));
     }
 
-    // --------------------------------------------
-    // Execution
-    // --------------------------------------------
-
     [[nodiscard]] ValidationResult result() const
     {
       return apply_rules<T>(field_, value_, rules_);
+    }
+
+    void result_into(ValidationErrors &out) const
+    {
+      apply_rules_into<T>(field_, value_, rules_, out);
     }
 
   private:

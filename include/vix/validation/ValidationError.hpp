@@ -18,19 +18,20 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <cstdint>
 
 namespace vix::validation
 {
 
   /**
-   * @brief Validation error codes.
+   * @brief Semantic validation error codes.
    *
-   * These codes represent semantic validation failures,
-   * not low-level parsing or conversion errors.
+   * These codes describe *what* rule failed, not *how* a value was parsed.
+   * They are stable and intended to be serialized (JSON, logs, APIs).
    */
-  enum class ValidationErrorCode
+  enum class ValidationErrorCode : std::uint8_t
   {
-    Required,
+    Required = 0,
     Min,
     Max,
     LengthMin,
@@ -44,16 +45,21 @@ namespace vix::validation
   /**
    * @brief Single validation error.
    *
-   * This is a semantic, user-facing error that can be
-   * serialized (HTTP 400), logged, or accumulated.
+   * Represents a semantic, user-facing validation failure.
+   * Typically used for HTTP 400 responses, form errors, or API diagnostics.
    */
   struct ValidationError
   {
-    std::string field; // e.g. "email", "age"
-    ValidationErrorCode code;
-    std::string message; // human-readable (not localized yet)
+    /// Field name (e.g. "email", "age")
+    std::string field;
 
-    // Optional metadata (min, max, expected, etc.)
+    /// Semantic error code
+    ValidationErrorCode code{ValidationErrorCode::Custom};
+
+    /// Human-readable message (not localized yet)
+    std::string message;
+
+    /// Optional metadata (min, max, expected values, etc.)
     std::unordered_map<std::string, std::string> meta;
 
     ValidationError() = default;
@@ -62,7 +68,9 @@ namespace vix::validation
         std::string f,
         ValidationErrorCode c,
         std::string msg)
-        : field(std::move(f)), code(c), message(std::move(msg))
+        : field(std::move(f)),
+          code(c),
+          message(std::move(msg))
     {
     }
 
@@ -71,15 +79,23 @@ namespace vix::validation
         ValidationErrorCode c,
         std::string msg,
         std::unordered_map<std::string, std::string> m)
-        : field(std::move(f)), code(c), message(std::move(msg)), meta(std::move(m))
+        : field(std::move(f)),
+          code(c),
+          message(std::move(msg)),
+          meta(std::move(m))
     {
     }
   };
 
   /**
-   * @brief String representation of ValidationErrorCode.
+   * @brief Convert ValidationErrorCode to a stable string identifier.
    *
-   * Useful for JSON responses and logs.
+   * Intended for:
+   * - JSON responses
+   * - logs
+   * - client-side error handling
+   *
+   * @note The returned strings are stable API identifiers.
    */
   [[nodiscard]] inline std::string_view
   to_string(ValidationErrorCode code) noexcept

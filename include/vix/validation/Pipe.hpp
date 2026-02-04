@@ -18,23 +18,29 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 #include <vix/conversion/ConversionError.hpp>
 #include <vix/conversion/Parse.hpp>
 
-#include <vix/validation/Validate.hpp>
+#include <vix/validation/Rule.hpp>
+#include <vix/validation/Rules.hpp>
+#include <vix/validation/ValidationError.hpp>
+#include <vix/validation/ValidationErrors.hpp>
 #include <vix/validation/ValidationResult.hpp>
 
 namespace vix::validation
 {
 
   /**
-   * @brief Convert a conversion error into a validation error (semantic).
+   * @brief Convert a conversion error into a semantic validation error.
    *
    * Notes:
    * - Validation should not leak low-level parsing details by default.
    * - We map it to ValidationErrorCode::Format.
-   * - conversion error code is stored in meta for debugging/observability.
+   * - The conversion error code and other details are stored in meta
+   *   for debugging and observability.
    */
   [[nodiscard]] inline ValidationError
   conversion_error_to_validation(
@@ -48,25 +54,28 @@ namespace vix::validation
         std::move(message)};
 
     ve.meta["conversion_code"] = std::string(vix::conversion::to_string(err.code));
+    ve.meta["position"] = std::to_string(err.position);
+
     if (!err.input.empty())
     {
       ve.meta["input"] = std::string(err.input);
     }
-    ve.meta["position"] = std::to_string(err.position);
 
     return ve;
   }
 
   /**
-   * @brief Validate a scalar value that comes as string input:
+   * @brief Fluent validator for string inputs that must be parsed to T first.
+   *
+   * Flow:
    * - parse input -> T using vix::conversion
-   * - if parse fails => add a format error
-   * - else apply validation rules on T
+   * - if parse fails => push a Format error
+   * - else apply typed rules on T
    *
    * Example:
    *   auto res = validate_parsed<int>("age", input)
    *                .between(18, 120)
-   *                .result();
+   *                .result("age must be a number");
    */
   template <typename T>
   class ParsedValidator
@@ -77,14 +86,12 @@ namespace vix::validation
     {
     }
 
-    // Add a rule (applies only if parsing succeeds)
     ParsedValidator &rule(Rule<T> r)
     {
       rules_.push_back(std::move(r));
       return *this;
     }
 
-    // Numeric helpers
     ParsedValidator &min(T v, std::string message = "value is below minimum")
       requires std::is_arithmetic_v<T>
     {
@@ -103,15 +110,22 @@ namespace vix::validation
       return rule(rules::between<T>(a, b, std::move(message)));
     }
 
-    [[nodiscard]] ValidationResult result(std::string parse_message = "invalid value") const
+    /**
+     * @brief Execute validation and append errors into an existing container.
+     *
+     * @return true if ok (no new errors were added), false otherwise.
+     */
+    [[nodiscard]] bool result_into(
+        ValidationErrors &out,
+        std::string parse_message = "invalid value") const
     {
-      ValidationErrors out;
+      const std::size_t before = out.size();
 
       auto parsed = vix::conversion::parse<T>(input_);
       if (!parsed)
       {
         out.add(conversion_error_to_validation(field_, parsed.error(), std::move(parse_message)));
-        return ValidationResult{std::move(out)};
+        return false;
       }
 
       const T &value = parsed.value();
@@ -124,6 +138,17 @@ namespace vix::validation
         }
       }
 
+      return out.size() == before;
+    }
+
+    /**
+     * @brief Execute validation and return a standalone ValidationResult.
+     */
+    [[nodiscard]] ValidationResult result(
+        std::string parse_message = "invalid value") const
+    {
+      ValidationErrors out;
+      (void)result_into(out, std::move(parse_message));
       return ValidationResult{std::move(out)};
     }
 

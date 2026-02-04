@@ -12,7 +12,8 @@
  *
  *  Vix.cpp
  */
-#pragma once
+#ifndef VIX_VALIDATION_BASE_MODEL_HPP
+#define VIX_VALIDATION_BASE_MODEL_HPP
 
 #include <type_traits>
 
@@ -21,6 +22,7 @@
 
 namespace vix::validation
 {
+
   /**
    * @brief Pydantic-like base model using CRTP.
    *
@@ -72,3 +74,5 @@ namespace vix::validation
   };
 
 } // namespace vix::validation
+
+#endif
