@@ -20,6 +20,7 @@
 #include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <vix/validation/Schema.hpp>
 #include <vix/validation/ValidationError.hpp>
@@ -93,6 +94,43 @@ namespace vix::validation
                          std::declval<const Input &>()))>> : std::true_type
     {
     };
+
+    /**
+     * @brief Detects: static bool set(Derived&, std::string_view, std::string_view).
+     *
+     * Optional ultra-minimal KV binder for examples and simple forms.
+     */
+    template <typename Derived, typename = void>
+    struct has_kv_set : std::false_type
+    {
+    };
+
+    template <typename Derived>
+    struct has_kv_set<Derived, std::void_t<decltype(Derived::set(
+                                   std::declval<Derived &>(),
+                                   std::declval<std::string_view>(),
+                                   std::declval<std::string_view>()))>> : std::true_type
+    {
+    };
+
+    template <typename Derived>
+    inline constexpr bool has_kv_set_v = has_kv_set<Derived>::value;
+
+    /**
+     * @brief Detect KV input type: std::vector<std::pair<std::string_view, std::string_view>>.
+     */
+    template <typename Input>
+    struct is_kv_input : std::false_type
+    {
+    };
+
+    template <>
+    struct is_kv_input<std::vector<std::pair<std::string_view, std::string_view>>> : std::true_type
+    {
+    };
+
+    template <typename Input>
+    inline constexpr bool is_kv_input_v = is_kv_input<std::remove_cv_t<Input>>::value;
 
     template <typename Derived, typename Input>
     inline constexpr bool has_bind2_v = has_bind2<Derived, Input>::value;
@@ -331,12 +369,27 @@ namespace vix::validation
           return FormResult<cleaned_type>(std::move(errors));
         }
       }
+      else if constexpr (detail::is_kv_input_v<Input> && detail::has_kv_set_v<Derived>)
+      {
+        for (const auto &kv : in)
+        {
+          const bool ok = static_cast<bool>(Derived::set(form, kv.first, kv.second));
+          if (!ok)
+          {
+            errors.add(detail::make_form_error(
+                "unknown or invalid field: " + std::string(kv.first),
+                ValidationErrorCode::Format));
+            return FormResult<cleaned_type>(std::move(errors));
+          }
+        }
+      }
       else
       {
         static_assert(vix::validation::detail::dependent_false_v<Input>,
                       "Form::validate(Input): Derived must implement a compatible bind(). "
                       "Expected: static bool bind(Derived&, const Input&, ValidationErrors&) "
-                      "or static bool bind(Derived&, const Input&).");
+                      "or static bool bind(Derived&, const Input&) "
+                      "or (KV input) static bool set(Derived&, std::string_view, std::string_view).");
       }
 
       // 2) Validate using Schema<Derived>
@@ -364,6 +417,20 @@ namespace vix::validation
                       "Form: cleaned_type != Derived but Derived::clean() is missing.");
         return FormResult<cleaned_type>(std::move(form));
       }
+    }
+
+    // helper KV input type used by validate_kv
+    using kv_pair = std::pair<std::string_view, std::string_view>;
+    using kv_list = std::initializer_list<kv_pair>;
+    using kv_input = std::vector<kv_pair>;
+
+    [[nodiscard]] static FormResult<cleaned_type> validate_kv(kv_list kv)
+    {
+      kv_input in;
+      in.reserve(kv.size());
+      for (const auto &p : kv)
+        in.push_back(p);
+      return validate(in);
     }
 
     /**
