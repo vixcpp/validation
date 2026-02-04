@@ -18,6 +18,7 @@
 #include <functional>
 #include <string_view>
 #include <type_traits>
+#include <vector>
 
 #include <vix/validation/ValidationErrors.hpp>
 #include <vix/validation/ValidationResult.hpp>

@@ -20,6 +20,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <optional>
 
 #include <vix/validation/Rule.hpp>
 #include <vix/validation/Rules.hpp>
@@ -76,7 +77,8 @@ namespace vix::validation
     Validator &required(std::string message = "field is required")
       requires std::is_same_v<T, std::optional<U>>
     {
-      return rule(rules::required<U>(std::move(message)));
+      // FIX: rules::required(...) returns Rule<std::optional<U>>
+      return rule(rules::required(std::move(message)));
     }
 
     // numeric min/max/between
