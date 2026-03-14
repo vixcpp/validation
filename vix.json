@@ -1,0 +1,27 @@
+{
+  "name": "validation",
+  "namespace": "vix",
+  "version": "1.0.0",
+  "type": "header-only",
+  "include": "include",
+  "license": "MIT",
+  "description": "Header-only validation utilities for Vix.cpp: rules, schemas, models, forms, and error handling.",
+  "keywords": [
+    "cpp",
+    "vix",
+    "validation",
+    "header-only",
+    "rules",
+    "schema",
+    "form",
+    "errors",
+    "utilities"
+  ],
+  "repository": "https://github.com/vixcpp/validation",
+  "authors": [
+    {
+      "name": "Gaspard Kirira",
+      "github": "Gaspardkirira"
+    }
+  ]
+}
