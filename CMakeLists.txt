@@ -103,11 +103,11 @@ if (VALIDATION_SOURCES)
   )
 
   if (TARGET vix_warnings)
-    target_link_libraries(vix_validation PUBLIC vix_warnings)
+    target_link_libraries(vix_validation PRIVATE vix_warnings)
   endif()
 
   if (VIX_ENABLE_SANITIZERS AND TARGET vix_sanitizers)
-    target_link_libraries(vix_validation PUBLIC vix_sanitizers)
+    target_link_libraries(vix_validation PRIVATE vix_sanitizers)
   endif()
 
   set_target_properties(vix_validation PROPERTIES
@@ -147,10 +147,6 @@ else()
   target_link_libraries(vix_validation INTERFACE
     ${VIX_CONVERSION_TARGET}
   )
-
-  if (VIX_ENABLE_SANITIZERS AND TARGET vix_sanitizers)
-    target_link_libraries(vix_validation INTERFACE vix_sanitizers)
-  endif()
 
   install(TARGETS vix_validation
     EXPORT VixTargets
