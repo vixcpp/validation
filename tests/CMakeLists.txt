@@ -6,6 +6,15 @@ cmake_minimum_required(VERSION 3.20)
 include(CTest)
 enable_testing()
 
+# ------------------------------------------------------------
+# Validation tests
+# ------------------------------------------------------------
+# These tests are smoke-style executable tests.
+# Each test source owns its own main(), so they must be built as
+# one executable per source file.
+# Do not aggregate them into a single GoogleTest executable.
+# ------------------------------------------------------------
+
 set(VIX_VALIDATION_TESTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
 
 file(GLOB_RECURSE VIX_VALIDATION_TEST_SOURCES
@@ -19,49 +28,41 @@ endif()
 
 function(vix_validation_add_plain_test name src)
   add_executable(${name} ${src})
-  target_compile_features(${name} PRIVATE cxx_std_20)
-  target_link_libraries(${name} PRIVATE vix::validation)
 
-  if (TARGET vix_warnings)
-    target_link_libraries(${name} PRIVATE vix_warnings)
-  endif()
+  target_compile_features(${name}
+    PRIVATE
+      cxx_std_20
+  )
 
-  if (VIX_ENABLE_SANITIZERS AND TARGET vix_sanitizers)
-    target_link_libraries(${name} PRIVATE vix_sanitizers)
-  endif()
-
-  add_test(NAME ${name} COMMAND ${name})
-endfunction()
-
-if (TARGET GTest::gtest AND TARGET GTest::gtest_main)
-  message(STATUS "[validation][tests] Using GoogleTest.")
-
-  add_executable(vix_validation_tests ${VIX_VALIDATION_TEST_SOURCES})
-  target_compile_features(vix_validation_tests PRIVATE cxx_std_20)
-  target_link_libraries(vix_validation_tests
+  target_link_libraries(${name}
     PRIVATE
       vix::validation
-      GTest::gtest
-      GTest::gtest_main
   )
 
   if (TARGET vix_warnings)
-    target_link_libraries(vix_validation_tests PRIVATE vix_warnings)
+    target_link_libraries(${name}
+      PRIVATE
+        vix_warnings
+    )
   endif()
 
   if (VIX_ENABLE_SANITIZERS AND TARGET vix_sanitizers)
-    target_link_libraries(vix_validation_tests PRIVATE vix_sanitizers)
+    target_link_libraries(${name}
+      PRIVATE
+        vix_sanitizers
+    )
   endif()
 
-  include(GoogleTest)
-  gtest_discover_tests(vix_validation_tests)
+  add_test(
+    NAME ${name}
+    COMMAND ${name}
+  )
+endfunction()
 
-else()
-  message(STATUS "[validation][tests] GoogleTest not found. Building plain tests.")
+message(STATUS "[validation][tests] Building plain executable tests.")
 
-  foreach(src ${VIX_VALIDATION_TEST_SOURCES})
-    get_filename_component(fname ${src} NAME_WE)
-    set(tname "vix_validation_test_${fname}")
-    vix_validation_add_plain_test(${tname} ${src})
-  endforeach()
-endif()
+foreach(src IN LISTS VIX_VALIDATION_TEST_SOURCES)
+  get_filename_component(fname "${src}" NAME_WE)
+  set(tname "vix_validation_test_${fname}")
+  vix_validation_add_plain_test(${tname} "${src}")
+endforeach()
