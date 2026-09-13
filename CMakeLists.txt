@@ -148,6 +148,10 @@ else()
     ${VIX_CONVERSION_TARGET}
   )
 
+  set_target_properties(vix_validation PROPERTIES
+    EXPORT_NAME validation
+  )
+
   install(TARGETS vix_validation
     EXPORT VixTargets
     INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
